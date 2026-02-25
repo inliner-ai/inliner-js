@@ -1,6 +1,6 @@
 /**
  * Inliner API Client for Node.js and TypeScript
- * Supports image tagging, generation, and project management.
+ * Supports image tagging, generation, editing, and project management.
  */
 
 export interface InlinerOptions {
@@ -67,6 +67,31 @@ export interface UploadResult {
   };
 }
 
+export interface GenerateOptions {
+  project: string;
+  prompt: string;
+  width?: number;
+  height?: number;
+  format?: 'png' | 'jpg';
+  /** Use smart URL recommendation (default: true) */
+  smartUrl?: boolean;
+}
+
+export interface EditOptions {
+  /** Project namespace (required when editing local files) */
+  project?: string;
+  instruction: string;
+  format?: 'png' | 'jpg';
+  width?: number;
+  height?: number;
+}
+
+export interface ImageResult {
+  data: Uint8Array;
+  url: string;
+  contentPath: string;
+}
+
 export class InlinerClient {
   private readonly apiKey: string;
   private readonly apiUrl: string;
@@ -127,6 +152,165 @@ export class InlinerClient {
     return res.json() as Promise<T>;
   }
 
+  // --- Generation & Editing Methods ---
+
+  /**
+   * Generate an image from a text prompt.
+   */
+  async generateImage(options: GenerateOptions): Promise<ImageResult> {
+    const { project, prompt, width, height, format = 'png', smartUrl = true } = options;
+
+    if (smartUrl) {
+      // Step 1: Recommend smart slug
+      let recommendedSlug: string;
+      try {
+        const recommendation = await this.apiFetch<any>('url/recommend', {
+          method: 'POST',
+          body: JSON.stringify({ prompt, project, width, height, extension: format }),
+        });
+        recommendedSlug = recommendation.recommendedSlug;
+      } catch {
+        recommendedSlug = this.slugify(prompt);
+      }
+
+      // Step 2: Generate with slug
+      const result = await this.apiFetch<any>('content/generate', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, project, slug: recommendedSlug, width, height, extension: format }),
+      });
+
+      const contentPath = result.prompt?.replace(/^\//, '') || `${project}/${recommendedSlug}.${format}`;
+      
+      // If we got the data back immediately, return it
+      if (result.mediaAsset?.data) {
+        const [, base64] = result.mediaAsset.data.split(',');
+        return {
+          data: this.base64ToUint8Array(base64),
+          url: `${this.imageUrl}/${contentPath}`,
+          contentPath
+        };
+      }
+
+      // Otherwise poll
+      return this.pollImage(contentPath, 'Generating');
+    } else {
+      // Legacy behavior: poll by derived slug
+      const slug = this.slugify(prompt);
+      const contentPath = width && height
+        ? `${project}/${slug}_${width}x${height}.${format}`
+        : `${project}/${slug}.${format}`;
+      return this.pollImage(contentPath, 'Generating');
+    }
+  }
+
+  /**
+   * Edit an existing image or a local file.
+   * @param source - Inliner URL or image file (Buffer/Blob/File)
+   * @param options - Edit options (instruction is required)
+   */
+  async editImage(
+    source: string | Buffer | Blob | File,
+    options: EditOptions
+  ): Promise<ImageResult> {
+    const { instruction, format = 'png', project, width, height } = options;
+    const editSlug = this.slugify(instruction);
+    const dimsSuffix = width && height ? `_${width}x${height}` : '';
+
+    if (typeof source === 'string' && (source.startsWith('http://') || source.startsWith('https://'))) {
+      // Edit an existing URL via chaining
+      let urlPath: string;
+      try {
+        urlPath = new URL(source).pathname;
+      } catch {
+        throw new Error(`Invalid source URL: ${source}`);
+      }
+      const basePath = urlPath.replace(/^\//, '');
+      // If basePath already has dimensions, we might want to replace them if width/height provided, 
+      // but URL chaining usually inherits or appends.
+      // The CLI pattern is: {basePath}/{editSlug}.{format}
+      const contentPath = `${basePath}/${editSlug}${dimsSuffix}.${format}`;
+      return this.pollImage(contentPath, 'Editing');
+    } else {
+      // Edit a local file: Upload first, then edit
+      if (!project) {
+        throw new Error('Project namespace is required when editing local files');
+      }
+
+      const uploadName = this.slugify(`edit-source-${Date.now()}`);
+      const uploadResult = await this.uploadImage(source as any, `${uploadName}.png`, { project, slug: uploadName });
+      
+      const uploadedPath = uploadResult.content.prompt.replace(/^\//, '');
+      const contentPath = `${uploadedPath}/${editSlug}${dimsSuffix}.${format}`;
+      
+      return this.pollImage(contentPath, 'Editing');
+    }
+  }
+
+  private async pollImage(contentPath: string, label: string, maxSeconds = 180): Promise<ImageResult> {
+    const jsonPath = `content/request-json/${contentPath}`;
+    const imgUrl = `${this.imageUrl}/${contentPath}`;
+    const maxAttempts = Math.ceil(maxSeconds / 3);
+
+    for (let i = 0; i < maxAttempts; i++) {
+      const url = `${this.apiUrl}/${jsonPath}`;
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${this.apiKey}` }
+      });
+
+      if (res.status === 200) {
+        const json = await res.json();
+        if (json.mediaAsset?.data) {
+          const [, base64] = json.mediaAsset.data.split(',');
+          return {
+            data: this.base64ToUint8Array(base64),
+            url: imgUrl,
+            contentPath
+          };
+        }
+        
+        // Fallback: try fetching from CDN
+        const cdnRes = await fetch(imgUrl, {
+          headers: { 'Authorization': `Bearer ${this.apiKey}` }
+        });
+        if (cdnRes.ok) {
+          return {
+            data: new Uint8Array(await cdnRes.arrayBuffer()),
+            url: imgUrl,
+            contentPath
+          };
+        }
+      }
+
+      if (res.status !== 200 && res.status !== 202) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`${label} failed (${res.status}): ${body}`);
+      }
+
+      // 202 - Accepted/Processing, wait and retry
+      await new Promise(r => setTimeout(r, 3000));
+    }
+
+    throw new Error(`${label} timed out after ${maxSeconds}s. URL: ${imgUrl}`);
+  }
+
+  private slugify(text: string): string {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-{2,}/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 100);
+  }
+
+  private base64ToUint8Array(base64: string): Uint8Array {
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
+
   // --- Upload Methods ---
 
   /**
@@ -143,13 +327,6 @@ export class InlinerClient {
    * ```ts
    * // Auto-detect everything (title, description, tags)
    * await client.uploadImage(buffer, 'hero-banner.png', { project: 'my-site' });
-   *
-   * // Override title and tags, let AI generate description
-   * await client.uploadImage(buffer, 'hero-banner.png', {
-   *   project: 'my-site',
-   *   title: 'Hero Banner',
-   *   tags: ['hero', 'banner', 'homepage'],
-   * });
    * ```
    */
   async uploadImage(
@@ -318,17 +495,13 @@ export class InlinerClient {
     });
   }
 
-  // --- Generation & Metadata Helpers ---
+  // --- Helpers ---
 
   /**
    * Build an Inliner image URL
    */
   buildImageUrl(project: string, description: string, width: number, height: number, format: 'png' | 'jpg' = 'png'): string {
-    const slug = description
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
+    const slug = this.slugify(description);
     return `${this.imageUrl}/${project}/${slug}_${width}x${height}.${format}`;
   }
 }

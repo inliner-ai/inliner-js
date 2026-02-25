@@ -31,16 +31,57 @@ const images = await client.search({
   max_results: 10
 });
 
-// 4. Upload an image with manual overrides
-// (Uses AI to auto-detect any fields you omit)
-await client.uploadImage(fileBuffer, 'hero-banner.png', {
-  project: 'my-site',
-  title: 'Hero Banner',
-  tags: ['hero', 'banner', 'homepage'],
+// 5. Generate a new image
+const generation = await client.generateImage({
+  project: 'marketing',
+  prompt: 'a futuristic city with flying cars',
+  width: 1200,
+  height: 600
 });
+console.log('Generated URL:', generation.url);
+// generation.data contains the binary Uint8Array of the image
+
+// 6. Edit an existing image
+const edit = await client.editImage(generation.url, {
+  instruction: 'make it sunset time'
+});
+console.log('Edited URL:', edit.url);
 ```
 
 ## Core Features
+
+### Image Generation
+Generate high-quality AI images using natural language prompts.
+
+```typescript
+const result = await client.generateImage({
+  project: 'my-site',
+  prompt: 'minimalist workspace with a laptop and a plant',
+  format: 'jpg',
+  width: 1920,
+  height: 1080,
+  smartUrl: true // Use AI-optimized short URLs
+});
+```
+
+### Image Editing
+Apply AI instructions to existing images by URL or by uploading a local file.
+
+```typescript
+// Edit by URL
+const edited = await client.editImage('https://img.inliner.ai/proj/img_800x600.png', {
+  instruction: 'add a coffee mug on the desk',
+  width: 800,
+  height: 600
+});
+
+// Edit local file (Node.js example)
+const buffer = await fs.readFile('photo.png');
+const result = await client.editImage(buffer, {
+  project: 'my-site',
+  instruction: 'remove the background'
+});
+```
 
 ### Image Upload & AI Auto-Detection
 Upload images and let Inliner's AI (Gemini) automatically generate titles, descriptions, and tags. Or provide your own to skip the AI analysis.
