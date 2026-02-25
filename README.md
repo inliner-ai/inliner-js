@@ -123,11 +123,54 @@ Utilize the Inliner search expression engine to filter assets precisely.
 
 ```typescript
 // Find PNG images with both 'wildlife' and 'winter' tags
-const results = await client.search({
+const images = await client.search({
   expression: 'tags:wildlife AND tags:winter AND format:png',
   sort_by: 'createdTs',
   direction: 'desc'
 });
+
+// images is an array of content objects:
+// [
+//   {
+//     contentId: "uuid-1",
+//     title: "Snow Leopard",
+//     description: "A snow leopard resting on a cliff in the Himalayas.",
+//     tags: ["wildlife", "winter", "leopard"],
+//     url: "https://img.inliner.ai/project/snow-leopard_800x600.png",
+//     width: 800,
+//     height: 600
+//   },
+//   ...
+// ]
+```
+
+### Listing & Iterating Assets
+Fetch and render a gallery of images from a specific project.
+
+```typescript
+// List images from the 'marketing' project
+const items = await client.listImages({
+  projectId: 'marketing',
+  limit: 20
+});
+
+// Example: Rendering in a hypothetical React component
+return (
+  <div className="gallery">
+    {items.map(image => (
+      <div key={image.contentId} className="image-card">
+        <img src={image.url} alt={image.title} />
+        <h3>{image.title}</h3>
+        <p>{image.description}</p>
+        <div className="tags">
+          {image.tags?.map(tag => (
+            <span key={tag} className="tag-pill">{tag}</span>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+);
 ```
 
 ### Project Management
