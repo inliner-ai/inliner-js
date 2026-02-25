@@ -424,12 +424,18 @@ export class InlinerClient {
 
   /**
    * Search content with expressions (e.g., "tags:lion AND tags:snow")
+   * 
+   * This method uses a GET request to the backend. The expression is parsed
+   * securely on the server using parameterized SQL queries to prevent injection.
    */
   async search(options: SearchOptions): Promise<any[]> {
-    return this.apiFetch<any[]>('content/search', {
-      method: 'POST',
-      body: JSON.stringify(options),
-    });
+    const params = new URLSearchParams();
+    params.append('expression', options.expression);
+    if (options.sort_by) params.append('sort_by', options.sort_by);
+    if (options.direction) params.append('direction', options.direction);
+    if (options.max_results) params.append('max_results', options.max_results.toString());
+    
+    return this.apiFetch<any[]>(`content/search?${params.toString()}`);
   }
 
   /**
