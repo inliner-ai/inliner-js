@@ -270,6 +270,28 @@ export class InlinerClient {
     return this.apiFetch<any[]>(path);
   }
 
+  /**
+   * Delete one or more images by their content IDs
+   */
+  async deleteImages(contentIds: string[]): Promise<{ message: string }> {
+    return this.apiFetch<{ message: string }>('content/delete', {
+      method: 'POST',
+      body: JSON.stringify({ contentIds }),
+    });
+  }
+
+  /**
+   * Rename an image (update its URL slug and project)
+   * @param contentId UUID of the content
+   * @param newUrl New path in "project/slug" format (e.g. "marketing/new-hero")
+   */
+  async renameImage(contentId: string, newUrl: string): Promise<{ success: true; message: string }> {
+    return this.apiFetch<{ success: true; message: string }>(`content/rename/${contentId}`, {
+      method: 'POST',
+      body: JSON.stringify({ newUrl }),
+    });
+  }
+
   // --- Project Methods ---
 
   /**

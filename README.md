@@ -30,9 +30,31 @@ const images = await client.search({
   expression: 'tags:office AND tags:startup',
   max_results: 10
 });
+
+// 4. Upload an image with manual overrides
+// (Uses AI to auto-detect any fields you omit)
+await client.uploadImage(fileBuffer, 'hero-banner.png', {
+  project: 'my-site',
+  title: 'Hero Banner',
+  tags: ['hero', 'banner', 'homepage'],
+});
 ```
 
 ## Core Features
+
+### Image Upload & AI Auto-Detection
+Upload images and let Inliner's AI (Gemini) automatically generate titles, descriptions, and tags. Or provide your own to skip the AI analysis.
+
+```typescript
+// Full control — no AI analysis triggered for provided fields
+await client.uploadImage(fileBuffer, 'hero.png', {
+  project: 'my-site',
+  slug: 'custom-slug',
+  title: 'Hero Banner',
+  description: 'A wide banner image for the homepage hero section.',
+  tags: ['hero', 'banner'],
+});
+```
 
 ### Image Tagging & Management
 Manage tags for better organization and searchability across your Inliner assets.
@@ -47,6 +69,12 @@ await client.removeTags(['uuid-123'], ['old-tag']);
 
 // Replace all tags on a set of images
 await client.replaceTags(['uuid-123', 'uuid-456'], ['new-vibe', 'modern']);
+
+// Delete images
+await client.deleteImages(['uuid-123', 'uuid-456']);
+
+// Rename an image (update its URL slug/project)
+await client.renameImage('uuid-123', 'marketing/brand-new-hero');
 ```
 
 ### Advanced Search
