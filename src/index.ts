@@ -30,6 +30,7 @@ export interface SearchOptions {
   sort_by?: string;
   direction?: 'asc' | 'desc';
   max_results?: number;
+  next_cursor?: string;
 }
 
 export interface Project {
@@ -434,18 +435,32 @@ export class InlinerClient {
     if (options.sort_by) params.append('sort_by', options.sort_by);
     if (options.direction) params.append('direction', options.direction);
     if (options.max_results) params.append('max_results', options.max_results.toString());
+    if (options.next_cursor) params.append('next_cursor', options.next_cursor);
     
     return this.apiFetch<any[]>(`content/search?${params.toString()}`);
   }
 
   /**
-   * List all images for the account or a specific project
+   * List all images for the account or a specific project.
+   * Supports pagination and search.
+   * 
+   * @param options.page - Page number (starts at 1)
+   * @param options.pageSize - Number of items per page (default 50)
+   * @param options.search - Optional search string
+   * @param options.projectId - Optional project namespace filter
    */
-  async listImages(options: { projectId?: string; limit?: number } = {}): Promise<any[]> {
+  async listImages(options: { 
+    projectId?: string; 
+    page?: number; 
+    pageSize?: number;
+    search?: string;
+  } = {}): Promise<any[]> {
     let path = 'content/images';
     const params = new URLSearchParams();
     if (options.projectId) params.append('projectId', options.projectId);
-    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.page) params.append('page', options.page.toString());
+    if (options.pageSize) params.append('pageSize', options.pageSize.toString());
+    if (options.search) params.append('search', options.search);
     
     const queryString = params.toString();
     if (queryString) path += `?${queryString}`;

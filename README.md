@@ -118,40 +118,34 @@ await client.deleteImages(['uuid-123', 'uuid-456']);
 await client.renameImage('uuid-123', 'marketing/brand-new-hero');
 ```
 
-### Advanced Search
-Utilize the Inliner search expression engine to filter assets precisely.
+### Advanced Search & Infinite Scroll
+Utilize the Inliner search expression engine with cursor-based pagination for large libraries.
 
 ```typescript
 // Find PNG images with both 'wildlife' and 'winter' tags
-const images = await client.search({
+const results = await client.search({
   expression: 'tags:wildlife AND tags:winter AND format:png',
-  sort_by: 'createdTs',
-  direction: 'desc'
+  sort_by: 'created_at',
+  max_results: 50
 });
 
-// images is an array of content objects:
-// [
-//   {
-//     contentId: "uuid-1",
-//     title: "Snow Leopard",
-//     description: "A snow leopard resting on a cliff in the Himalayas.",
-//     tags: ["wildlife", "winter", "leopard"],
-//     url: "https://img.inliner.ai/project/snow-leopard_800x600.png",
-//     width: 800,
-//     height: 600
-//   },
-//   ...
-// ]
+// To fetch the next page (infinite scroll), use the next_cursor from the result
+const nextPage = await client.search({
+  expression: 'tags:wildlife AND tags:winter AND format:png',
+  next_cursor: results.next_cursor
+});
 ```
 
 ### Listing & Iterating Assets
-Fetch and render a gallery of images from a specific project.
+Fetch and render a gallery of images with support for pagination and search.
 
 ```typescript
-// List images from the 'marketing' project
+// List images from the 'marketing' project with pagination
 const items = await client.listImages({
   projectId: 'marketing',
-  limit: 20
+  page: 1,
+  pageSize: 20,
+  search: 'sunset' // Optional keyword search
 });
 
 // Example: Rendering in a hypothetical React component
