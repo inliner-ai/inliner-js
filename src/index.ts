@@ -68,6 +68,14 @@ export interface UploadResult {
   };
 }
 
+export interface MetadataUpdateOptions {
+  title?: string | null;
+  description?: string | null;
+  altText?: string | null;
+  caption?: string | null;
+  customMetadata?: Record<string, any> | null;
+}
+
 export interface GenerateOptions {
   project: string;
   prompt: string;
@@ -91,6 +99,14 @@ export interface ImageResult {
   data: Uint8Array;
   url: string;
   contentPath: string;
+}
+
+export interface ListImagesResult {
+  items: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 export class InlinerClient {
@@ -417,6 +433,16 @@ export class InlinerClient {
   }
 
   /**
+   * Bulk update metadata for one or more content items.
+   */
+  async updateMetadata(contentIds: string[], metadata: MetadataUpdateOptions): Promise<{ success: true; message: string }> {
+    return this.apiFetch<{ success: true; message: string }>('content/metadata', {
+      method: 'POST',
+      body: JSON.stringify({ contentIds, metadata }),
+    });
+  }
+
+  /**
    * Get all images with a specific tag
    */
   async getImagesByTag(tag: string): Promise<any[]> {
@@ -454,7 +480,7 @@ export class InlinerClient {
     page?: number; 
     pageSize?: number;
     search?: string;
-  } = {}): Promise<any[]> {
+  } = {}): Promise<ListImagesResult> {
     let path = 'content/images';
     const params = new URLSearchParams();
     if (options.projectId) params.append('projectId', options.projectId);
@@ -465,7 +491,7 @@ export class InlinerClient {
     const queryString = params.toString();
     if (queryString) path += `?${queryString}`;
     
-    return this.apiFetch<any[]>(path);
+    return this.apiFetch<ListImagesResult>(path);
   }
 
   /**
