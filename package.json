@@ -1,6 +1,6 @@
 {
   "name": "@inliner/js",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "TypeScript client for Inliner.ai — image tagging, generation, and management",
   "main": "dist/index.js",
